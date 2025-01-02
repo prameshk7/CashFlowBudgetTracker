@@ -1,0 +1,187 @@
+﻿@page "/dashboard"
+@using PrameshBudgetTracker.Components.Layout
+@layout SecondLayout
+
+@inject NavigationManager Navigation
+@inject userService UserService
+
+<p class="text-xl font-semibold mb-4">Logged in as: @username</p>
+
+<div class="page mt-4">
+    <main>
+        <div class="top-row px-4 mb-6">
+            <h1 class="text-3xl font-bold">Dashboard</h1>
+        </div>
+
+        <!-- Transaction Filters -->
+        <div class="filter-section bg-white p-4 rounded-lg shadow-lg mb-6">
+            <h2 class="text-lg font-semibold mb-4">Filters</h2>
+
+            <label for="transactionType">Transaction Type:</label>
+            <select id="transactionType" @bind="selectedTransactionType" class="mb-4">
+                <option value="">All</option>
+                <option value="Income">Income</option>
+                <option value="Expense">Expense</option>
+            </select>
+
+            <label for="tags">Tags:</label>
+            <input type="text" id="tags" @bind="tagFilter" placeholder="Search by tags" class="mb-4" />
+
+            <label for="dateRange">Date Range:</label>
+            <input type="date" @bind="startDate" />
+            <input type="date" @bind="endDate" class="mb-4" />
+
+            <label for="search">Search by Title:</label>
+            <input type="text" id="search" @bind="searchQuery" placeholder="Search by title" class="mb-4" />
+
+            <!-- Apply Filter Button -->
+            <button class="bg-blue-500 text-white p-2 rounded-lg" @onclick="ApplyFilters">Apply Filters</button>
+        </div>
+
+        <!-- Transaction Summary -->
+        <div class="summary-section bg-white p-4 rounded-lg shadow-lg mb-6">
+            <h2 class="text-xl font-semibold mb-4">Transaction Summary</h2>
+            <p>Total Transactions: @filteredTransactions.Count()</p>
+            <p>Total Inflows: @totalInflow</p>
+            <p>Total Outflows: @totalOutflow</p>
+            <p>Highest Inflow: @highestInflow</p>
+            <p>Lowest Outflow: @lowestOutflow</p>
+            <p>Current Balance: @currentBalance</p> <!-- Display Current Balance -->
+            <p>Sufficient Balance for Outflows: @sufficientBalance</p>
+        </div>
+
+        <!-- Transaction List -->
+        <div class="transaction-list bg-white p-4 rounded-lg shadow-lg">
+            <h2 class="text-lg font-semibold mb-4">Transactions</h2>
+            <table class="min-w-full table-auto">
+                <thead>
+                    <tr>
+                        <th class="px-4 py-2">Title</th>
+                        <th class="px-4 py-2">Amount</th>
+                        <th class="px-4 py-2">Type</th>
+                        <th class="px-4 py-2">Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var transaction in filteredTransactions.OrderByDescending(t => t.date))
+                    {
+                            <tr>
+                                <td class="px-4 py-2">@transaction.title</td>
+                                <td class="px-4 py-2">@transaction.amount</td>
+                                <td class="px-4 py-2">@transaction.transactionType</td>
+                                <td class="px-4 py-2">@transaction.date.ToString("yyyy-MM-dd")</td>
+                            </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </main>
+</div>
+
+@code {
+    private string username;
+    private List<TransactionModel> allTransactions = new List<TransactionModel>();
+    private List<TransactionModel> filteredTransactions = new List<TransactionModel>();
+
+    private string selectedTransactionType = "";
+    private string tagFilter = "";
+    private string searchQuery = "";
+    private DateTime? startDate = null;
+    private DateTime? endDate = null;
+
+    private int totalTransactions = 0;
+    private decimal totalInflow = 0;
+    private decimal totalOutflow = 0;
+    private decimal highestInflow = 0;
+    private decimal lowestOutflow = 0;
+    private decimal currentBalance = 0; // Track current balance
+    private string sufficientBalance = "Yes"; // Default assumption for sufficient balance
+
+    protected override void OnInitialized()
+    {
+        username = UserService.GetUsername();
+        if (string.IsNullOrEmpty(username))
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        LoadTransactions();
+        FilterTransactions();
+        CalculateSummary();
+    }
+
+    private void LoadTransactions()
+    {
+        // Load all transactions from the service (replace with actual logic)
+        allTransactions = UserService.GetTransactions(username) ?? new List<TransactionModel>();
+    }
+
+    private void ApplyFilters()
+    {
+        FilterTransactions();
+        CalculateSummary();
+    }
+
+    private void FilterTransactions()
+    {
+        // Ensure the transactions list is not null before filtering
+        if (allTransactions != null)
+        {
+            filteredTransactions = allTransactions;
+
+            // Apply filters for transaction type, tags, and date range
+            if (!string.IsNullOrEmpty(selectedTransactionType))
+            {
+                filteredTransactions = filteredTransactions.Where(t => t.transactionType == selectedTransactionType).ToList();
+            }
+
+            if (!string.IsNullOrEmpty(tagFilter))
+            {
+                filteredTransactions = filteredTransactions.Where(t => t.tags.Contains(tagFilter)).ToList();
+            }
+
+            if (startDate.HasValue)
+            {
+                filteredTransactions = filteredTransactions.Where(t => t.date >= startDate.Value).ToList();
+            }
+
+            if (endDate.HasValue)
+            {
+                filteredTransactions = filteredTransactions.Where(t => t.date <= endDate.Value).ToList();
+            }
+
+            if (!string.IsNullOrEmpty(searchQuery))
+            {
+                filteredTransactions = filteredTransactions.Where(t => t.title.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)).ToList();
+            }
+        }
+        else
+        {
+            filteredTransactions = new List<TransactionModel>();
+        }
+    }
+
+    private void CalculateSummary()
+    {
+        // Ensure filtered transactions is not null before calculating summary
+        if (filteredTransactions != null)
+        {
+            totalTransactions = filteredTransactions.Count;
+            totalInflow = filteredTransactions.Where(t => t.transactionType == "Income").Sum(t => t.amount);
+            totalOutflow = filteredTransactions.Where(t => t.transactionType == "Expense").Sum(t => t.amount);
+
+            highestInflow = filteredTransactions.Where(t => t.transactionType == "Income").Any() ?
+                             filteredTransactions.Where(t => t.transactionType == "Income").Max(t => t.amount) : 0;
+
+            lowestOutflow = filteredTransactions.Where(t => t.transactionType == "Expense").Any() ?
+                            filteredTransactions.Where(t => t.transactionType == "Expense").Min(t => t.amount) : 0;
+
+            // Track current balance
+            currentBalance = totalInflow - totalOutflow;
+
+            // Update sufficient balance logic
+            sufficientBalance = currentBalance > 0 ? "Yes" : "No"; // No outflows if balance is 0
+        }
+    }
+}

@@ -1,0 +1,99 @@
+﻿@page "/transaction"
+@using PrameshBudgetTracker.Components.Layout
+@layout SecondLayout
+
+@inject NavigationManager Navigation
+@inject userService UserService
+
+<p class="text-xl font-semibold mb-4">Logged in as: @username</p>
+
+<div class="page mt-4">
+    <main>
+        <div class="top-row px-4 mb-6">
+            <h1 class="text-3xl font-bold">Your Transactions</h1>
+        </div>
+
+        <!-- Transactions List -->
+        <div class="transaction-list max-w-4xl mx-auto">
+            <div class="bg-white p-8 rounded-lg shadow-lg">
+                <h2 class="text-xl font-semibold mb-4">Recent Transactions</h2>
+                @if (transactions.Any())
+                {
+                    <table class="w-full table-auto">
+                        <thead>
+                            <tr>
+                                <th class="px-4 py-2 border-b">Title</th>
+                                <th class="px-4 py-2 border-b">Amount</th>
+                                <th class="px-4 py-2 border-b">Type</th>
+                                <th class="px-4 py-2 border-b">Date</th>
+                                <th class="px-4 py-2 border-b">Tags</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var transaction in transactions)
+                            {
+                                <tr>
+                                    <td class="px-4 py-2 border-b">@transaction.title</td>
+                                    <td class="px-4 py-2 border-b">@transaction.amount</td>
+                                    <td class="px-4 py-2 border-b">@transaction.transactionType</td>
+                                    <td class="px-4 py-2 border-b">@transaction.date.ToString("MM/dd/yyyy")</td>
+                                    <td class="px-4 py-2 border-b">@string.Join(", ", transaction.tags)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+                else
+                {
+                    <p>No transactions found.</p>
+                }
+            </div>
+        </div>
+
+        <!-- Add New Transaction Buttons -->
+        <div class="mt-6 text-center">
+            <button @onclick="NavigateToCashIn" class="px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600">
+                Add Cash In
+            </button>
+            <button @onclick="NavigateToCashOut" class="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 ml-4">
+                Add Cash Out
+            </button>
+            <button @onclick="NavigateToDebt" class="px-6 py-3 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 ml-4">
+                Add Debt
+            </button>
+        </div>
+    </main>
+</div>
+
+@code {
+    private string username;
+    private List<TransactionModel> transactions;
+
+    protected override void OnInitialized()
+    {
+        username = UserService.GetUsername();
+        if (string.IsNullOrEmpty(username))
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        // Fetch transactions for the user from the service
+        transactions = UserService.GetTransactions(username);
+    }
+
+    private void NavigateToCashIn()
+    {
+        Navigation.NavigateTo("/cashin");
+    }
+
+    private void NavigateToCashOut()
+    {
+        Navigation.NavigateTo("/cashout");
+    }
+
+    private void NavigateToDebt()
+    {
+        Navigation.NavigateTo("/debts");
+    }
+}

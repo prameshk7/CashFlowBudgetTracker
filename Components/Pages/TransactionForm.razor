@@ -1,0 +1,134 @@
+﻿@code {
+    [Parameter]
+    public string transactionType { get; set; } // Determines the type of transaction: Income, Expense, or Debt.
+
+    private string username;
+    private string errorMessage;
+    private string selectedTag;
+    private string customTag;
+    private TransactionModel newTransaction = new TransactionModel();
+
+    [Inject]
+    private userService UserService { get; set; }
+    [Inject]
+    private NavigationManager Navigation { get; set; }
+
+    protected override void OnInitialized() 
+    {
+        username = UserService.GetUsername();
+        if (string.IsNullOrEmpty(username))
+        {
+            errorMessage = "No user found. Please log in.";
+        }
+
+        newTransaction.transactionType = transactionType; // Set the transaction type dynamically.
+    }
+
+    private void AddTransaction()
+    {
+        if (string.IsNullOrEmpty(username))
+        {
+            errorMessage = "You must be logged in to add a transaction.";
+            return;
+        }
+
+        if (string.IsNullOrEmpty(newTransaction.title) || newTransaction.amount <= 0)
+        {
+            errorMessage = "Please provide valid transaction details.";
+            return;
+        }
+
+        if (transactionType == "Expense")
+        {
+            decimal currentBalance = UserService.GetCurrentBalance(username);
+            if (newTransaction.amount > currentBalance)
+            {
+                errorMessage = $"Insufficient balance. Your current balance is {currentBalance:C}.";
+                return;
+            }
+        }
+
+        newTransaction.date = DateTime.Now;
+        newTransaction.Currency = UserService.GetUserCurrency(username) ?? "NPR";
+        newTransaction.isDebtCleared = false;
+
+        bool result = UserService.AddTransaction(username, newTransaction);
+
+        if (result)
+        {
+            errorMessage = "";
+            Navigation.NavigateTo("/dashboard");
+        }
+        else
+        {
+            errorMessage = "Failed to add transaction. Please try again.";
+        }
+    }
+
+    private void AddTag()
+    {
+        if (!string.IsNullOrEmpty(selectedTag) && !newTransaction.tags.Contains(selectedTag))
+        {
+            newTransaction.tags.Add(selectedTag);
+            selectedTag = "";
+        }
+    }
+
+    private void AddCustomTag()
+    {
+        if (!string.IsNullOrEmpty(customTag) && !newTransaction.tags.Contains(customTag))
+        {
+            newTransaction.tags.Add(customTag);
+            customTag = "";
+        }
+    }
+}
+
+<div class="transaction-form-container max-w-lg mx-auto">
+    <div class="form-box bg-white p-8 rounded-lg shadow-lg">
+        <h1 class="text-2xl font-bold mb-4">@transactionType Transaction</h1>
+        <div class="space-y-4">
+            <!-- Title Input -->
+            <input @bind="newTransaction.title" type="text" placeholder="Title"
+                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+
+            <!-- Amount Input -->
+            <input @bind="newTransaction.amount" type="number" placeholder="Amount"
+                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+
+            <!-- Notes Textarea -->
+            <textarea @bind="newTransaction.notes" placeholder="Notes"
+                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+
+            <!-- Tags Section -->
+            <div class="flex flex-col space-y-2">
+                <label for="tagSelector" class="font-medium text-gray-700">Select or Add Tags:</label>
+                <div class="flex flex-wrap gap-2">
+                    <select @bind="selectedTag" class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="">-- Select a Tag --</option>
+                        <option value="Groceries">Groceries</option>
+                        <option value="Rent">Rent</option>
+                        <option value="Utilities">Utilities</option>
+                    </select>
+                    <button @onclick="AddTag" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none">Add Tag</button>
+                </div>
+                <div class="flex flex-col">
+                    <input @bind="customTag" type="text" placeholder="Add Custom Tag" 
+                        class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mb-2" />
+                    <button @onclick="AddCustomTag" class="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 focus:outline-none">
+                        Add Custom Tag
+                    </button>
+                </div>
+            </div>
+
+            <p class="text-sm text-gray-500">Tags: @string.Join(", ", newTransaction.tags)</p>
+
+            <!-- Submit Button -->
+            <button @onclick="AddTransaction"
+                    class="w-full py-2 bg-green-500 text-white font-medium rounded-lg hover:bg-green-600 transition duration-200">
+                Save Transaction
+            </button>
+        </div>
+        <p class="text-red-500 text-sm mt-4">@errorMessage</p>
+    </div>
+</div>
