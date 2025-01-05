@@ -1,7 +1,218 @@
-﻿@page "/debts"
+﻿
+@page "/debts"
 @using PrameshBudgetTracker.Components.Layout
 @layout SecondLayout
-
 @inject NavigationManager Navigation
+@inject userService UserService
 
-<TransactionForm transactionType="Debt" />
+<div class="page mt-4">
+    <main>
+        <div class="top-row px-4 mb-6">
+            <h1 class="text-3xl font-bold">Debt Management</h1>
+        </div>
+
+        <!-- Debt Summary -->
+        <div class="summary-section bg-white p-6 rounded-lg shadow-lg mb-6">
+            <h2 class="text-xl font-semibold mb-4">Debt Summary</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="p-4 bg-blue-50 rounded-lg">
+                    <p class="text-sm text-gray-600">Total Active Debts</p>
+                    <p class="text-2xl font-bold text-blue-600">@activeDebts.Count</p>
+                </div>
+                <div class="p-4 bg-green-50 rounded-lg">
+                    <p class="text-sm text-gray-600">Total Cleared Debts</p>
+                    <p class="text-2xl font-bold text-green-600">@clearedDebts.Count</p>
+                </div>
+                <div class="p-4 bg-red-50 rounded-lg">
+                    <p class="text-sm text-gray-600">Total Outstanding Amount</p>
+                    <p class="text-2xl font-bold text-red-600">@totalOutstandingDebt.ToString("C")</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Active Debts -->
+        <div class="active-debts bg-white p-6 rounded-lg shadow-lg mb-6">
+            <h2 class="text-xl font-semibold mb-4">Active Debts</h2>
+            @if (activeDebts.Any())
+            {
+                <div class="overflow-x-auto">
+                    <table class="min-w-full table-auto">
+                        <thead>
+                            <tr class="bg-gray-50">
+                                <th class="px-4 py-2 text-left">Title</th>
+                                <th class="px-4 py-2 text-right">Original Amount</th>
+                                <th class="px-4 py-2 text-right">Remaining</th>
+                                <th class="px-4 py-2 text-left">Due Date</th>
+                                <th class="px-4 py-2 text-center">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var debt in activeDebts)
+                            {
+                                <tr class="border-t">
+                                    <td class="px-4 py-2">@debt.Title</td>
+                                    <td class="px-4 py-2 text-right">@debt.OriginalAmount.ToString("C")</td>
+                                    <td class="px-4 py-2 text-right">@debt.RemainingAmount.ToString("C")</td>
+                                    <td class="px-4 py-2">@debt.DueDate.ToString("MM/dd/yyyy")</td>
+                                    <td class="px-4 py-2 text-center">
+                                        <button @onclick="() => ShowRepaymentForm(debt)" 
+                                                class="px-4 py-1 bg-green-500 text-white rounded hover:bg-green-600">
+                                            Repay
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <p class="text-gray-500">No active debts.</p>
+            }
+        </div>
+
+        <!-- Cleared Debts -->
+        <div class="cleared-debts bg-white p-6 rounded-lg shadow-lg">
+            <h2 class="text-xl font-semibold mb-4">Cleared Debts</h2>
+            @if (clearedDebts.Any())
+            {
+                <div class="overflow-x-auto">
+                    <table class="min-w-full table-auto">
+                        <thead>
+                            <tr class="bg-gray-50">
+                                <th class="px-4 py-2 text-left">Title</th>
+                                <th class="px-4 py-2 text-right">Amount</th>
+                                <th class="px-4 py-2 text-left">Due Date</th>
+                                <th class="px-4 py-2 text-left">Cleared Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var debt in clearedDebts)
+                            {
+                                <tr class="border-t">
+                                    <td class="px-4 py-2">@debt.Title</td>
+                                    <td class="px-4 py-2 text-right">@debt.OriginalAmount.ToString("C")</td>
+                                    <td class="px-4 py-2">@debt.DueDate.ToString("MM/dd/yyyy")</td>
+                                    <td class="px-4 py-2">@debt.ClearedDate?.ToString("MM/dd/yyyy")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <p class="text-gray-500">No cleared debts.</p>
+            }
+        </div>
+    </main>
+</div>
+
+@if (showRepaymentForm)
+{
+    <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+        <div class="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
+            <h3 class="text-lg font-semibold mb-4">Repay Debt: @selectedDebt?.Title</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Remaining Amount</label>
+                    <p class="mt-1">@selectedDebt?.RemainingAmount.ToString("C")</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Amount to Repay</label>
+                    <input @bind="repaymentAmount" type="number" class="mt-1 w-full px-3 py-2 border rounded-md" />
+                </div>
+                @if (!string.IsNullOrEmpty(repaymentError))
+                {
+                    <p class="text-red-500 text-sm">@repaymentError</p>
+                }
+                <div class="flex justify-end space-x-4">
+                    <button @onclick="CancelRepayment" class="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600">
+                        Cancel
+                    </button>
+                    <button @onclick="ProcessRepayment" class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600">
+                        Confirm
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private string username;
+    private List<DebtModel> activeDebts = new List<DebtModel>();
+    private List<DebtModel> clearedDebts = new List<DebtModel>();
+    private decimal totalOutstandingDebt;
+    private bool showRepaymentForm;
+    private DebtModel selectedDebt;
+    private decimal repaymentAmount;
+    private string repaymentError;
+
+    protected override void OnInitialized()
+    {
+        username = UserService.GetUsername();
+        if (string.IsNullOrEmpty(username))
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        LoadDebts();
+    }
+
+    private void LoadDebts()
+    {
+        activeDebts = UserService.GetActiveDebts(username);
+        clearedDebts = UserService.GetClearedDebts(username);
+        totalOutstandingDebt = UserService.GetTotalDebt(username);
+    }
+
+    private void ShowRepaymentForm(DebtModel debt)
+    {
+        selectedDebt = debt;
+        repaymentAmount = debt.RemainingAmount;
+        repaymentError = "";
+        showRepaymentForm = true;
+    }
+
+    private void CancelRepayment()
+    {
+        showRepaymentForm = false;
+        selectedDebt = null;
+        repaymentAmount = 0;
+        repaymentError = "";
+    }
+
+    private void ProcessRepayment()
+    {
+        if (selectedDebt == null) return;
+
+        if (repaymentAmount <= 0 || repaymentAmount > selectedDebt.RemainingAmount)
+        {
+            repaymentError = "Invalid repayment amount";
+            return;
+        }
+
+        decimal currentBalance = UserService.GetCurrentBalance(username);
+        if (currentBalance < repaymentAmount)
+        {
+            repaymentError = "Insufficient balance for repayment";
+            return;
+        }
+
+        bool success = UserService.ClearDebt(username, selectedDebt.DebtID, repaymentAmount);
+        if (success)
+        {
+            LoadDebts();
+            showRepaymentForm = false;
+            selectedDebt = null;
+            repaymentAmount = 0;
+        }
+        else
+        {
+            repaymentError = "Failed to process repayment";
+        }
+    }
+}

@@ -1,75 +1,175 @@
 ﻿@page "/transaction"
 @using PrameshBudgetTracker.Components.Layout
 @layout SecondLayout
-
 @inject NavigationManager Navigation
 @inject userService UserService
 
-<p class="text-xl font-semibold mb-4">Logged in as: @username</p>
-
-<div class="page mt-4">
-    <main>
-        <div class="top-row px-4 mb-6">
-            <h1 class="text-3xl font-bold">Your Transactions</h1>
-        </div>
-
-        <!-- Transactions List -->
-        <div class="transaction-list max-w-4xl mx-auto">
-            <div class="bg-white p-8 rounded-lg shadow-lg">
-                <h2 class="text-xl font-semibold mb-4">Recent Transactions</h2>
-                @if (transactions.Any())
-                {
-                    <table class="w-full table-auto">
-                        <thead>
-                            <tr>
-                                <th class="px-4 py-2 border-b">Title</th>
-                                <th class="px-4 py-2 border-b">Amount</th>
-                                <th class="px-4 py-2 border-b">Type</th>
-                                <th class="px-4 py-2 border-b">Date</th>
-                                <th class="px-4 py-2 border-b">Tags</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var transaction in transactions)
-                            {
-                                <tr>
-                                    <td class="px-4 py-2 border-b">@transaction.title</td>
-                                    <td class="px-4 py-2 border-b">@transaction.amount</td>
-                                    <td class="px-4 py-2 border-b">@transaction.transactionType</td>
-                                    <td class="px-4 py-2 border-b">@transaction.date.ToString("MM/dd/yyyy")</td>
-                                    <td class="px-4 py-2 border-b">@string.Join(", ", transaction.tags)</td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                }
-                else
-                {
-                    <p>No transactions found.</p>
-                }
+<div class="min-h-screen bg-gray-50 p-4">
+    <div class="max-w-7xl mx-auto mb-6">
+        <div class="flex items-center justify-between mb-4">
+            <h1 class="text-2xl font-semibold">Your Transactions</h1>
+            <div class="flex gap-2">
+                <button @onclick="@(() => Navigation.NavigateTo("/cashin"))"
+                        class="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-md hover:bg-emerald-600">
+                    Cash In
+                </button>
+                <button @onclick="@(() => Navigation.NavigateTo("/cashout"))"
+                        class="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600">
+                    Cash Out
+                </button>
+                <button @onclick="@(() => Navigation.NavigateTo("/debts"))"
+                        class="flex items-center gap-2 px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600">
+                    Debts
+                </button>
             </div>
         </div>
 
-        <!-- Add New Transaction Buttons -->
-        <div class="mt-6 text-center">
-            <button @onclick="NavigateToCashIn" class="px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600">
-                Add Cash In
-            </button>
-            <button @onclick="NavigateToCashOut" class="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 ml-4">
-                Add Cash Out
-            </button>
-            <button @onclick="NavigateToDebt" class="px-6 py-3 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 ml-4">
-                Add Debt
-            </button>
+        <div class="bg-white rounded-lg p-4 mb-6 shadow">
+            <div class="flex flex-col gap-4 mb-4">
+                <div class="flex gap-4">
+                    <div class="flex-1">
+                        <div class="relative">
+                            <input @bind="searchQuery" @bind:event="oninput" type="text"
+                                   placeholder="Search by title or description..."
+                                   class="w-full pl-4 pr-4 py-2 border rounded-md focus:ring-2 focus:ring-blue-500" />
+                        </div>
+                    </div>
+
+                    <div class="flex-1 relative">
+                        <input @bind="tagSearchQuery" @bind:event="oninput"
+                               @onfocus="ShowTagSuggestions"
+                               @onblur="HandleTagBlur"
+                               type="text"
+                               placeholder="Search or add custom tags..."
+                               class="w-full pl-4 pr-4 py-2 border rounded-md focus:ring-2 focus:ring-blue-500" />
+
+                        @if (showTagSuggestions && !string.IsNullOrWhiteSpace(tagSearchQuery))
+                        {
+                            <div class="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg">
+                                @{
+                                    var matchingTags = availableTags
+                                    .Where(t => t.Contains(tagSearchQuery, StringComparison.OrdinalIgnoreCase))
+                                    .Take(5)
+                                    .ToList();
+                                }
+                                @foreach (var tag in matchingTags)
+                                {
+                                    <div @onclick="() => SelectTag(tag)"
+                                         class="px-4 py-2 hover:bg-gray-100 cursor-pointer">
+                                        @tag
+                                    </div>
+                                }
+                                @if (!matchingTags.Any())
+                                {
+                                    <div @onclick="() => AddCustomTag(tagSearchQuery)"
+                                         class="px-4 py-2 hover:bg-gray-100 cursor-pointer text-blue-600">
+                                        Add new tag: @tagSearchQuery
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                @if (selectedTags.Any())
+                {
+                    <div class="flex flex-wrap gap-2">
+                        @foreach (var tag in selectedTags)
+                        {
+                            <div class="flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-full">
+                                <span>@tag</span>
+                                <button @onclick="() => ToggleTagFilter(tag)"
+                                        class="hover:text-blue-900">
+                                    x
+                                </button>
+                            </div>
+                        }
+                    </div>
+                }
+
+                <div class="flex gap-2">
+                    <button @onclick="@(() => FilterTransactions("all"))"
+                            class="@GetFilterButtonClass("all")">
+                        All
+                    </button>
+                    <button @onclick="@(() => FilterTransactions("income"))"
+                            class="@GetFilterButtonClass("income")">
+                        Cash Inflow
+                    </button>
+                    <button @onclick="@(() => FilterTransactions("expense"))"
+                            class="@GetFilterButtonClass("expense")">
+                        Cash Outflow
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex justify-between items-center mb-4">
+                <div class="text-sm text-gray-600">Filter Transactions</div>
+                <div class="flex gap-4">
+                    <select @bind="sortOption" class="px-4 py-2 border rounded-md">
+                        <option value="date_desc">Latest First</option>
+                        <option value="date_asc">Oldest First</option>
+                        <option value="amount_desc">Highest Amount</option>
+                        <option value="amount_asc">Lowest Amount</option>
+                    </select>
+                </div>
+            </div>
         </div>
-    </main>
+
+        <div class="bg-white rounded-lg shadow">
+            <div class="p-4">
+                <h2 class="text-lg font-medium mb-4">Recent Transactions</h2>
+                @if (FilteredTransactions.Any())
+                {
+                    <div class="space-y-3">
+                        @foreach (var transaction in FilteredTransactions.Take(5))
+                        {
+                            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                <div class="flex items-center gap-3">
+                                    <div class="@GetTransactionIconClass(transaction.transactionType)">
+                                        @GetTransactionIcon(transaction.transactionType)
+                                    </div>
+                                    <div>
+                                        <div class="font-medium">@transaction.title</div>
+                                        <div class="text-sm text-gray-500">@transaction.date.ToString("MMM dd, yyyy")</div>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-4">
+                                    <div class="flex flex-wrap gap-1">
+                                        @foreach (var tag in transaction.tags)
+                                        {
+                                            <span class="px-2 py-0.5 bg-gray-100 rounded-full text-sm">@tag</span>
+                                        }
+                                    </div>
+                                    <div class="@GetAmountClass(transaction.transactionType)">
+                                        @GetFormattedAmount(transaction)
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <p class="text-gray-500 text-center py-4">No transactions found.</p>
+                }
+            </div>
+        </div>
+    </div>
 </div>
 
 @code {
     private string username;
-    private List<TransactionModel> transactions;
+    private List<TransactionModel> transactions = new();
+    private string searchQuery = "";
+    private string tagSearchQuery = "";
+    private string sortOption = "date_desc";
+    private string currentFilter = "all";
+    private HashSet<string> selectedTags = new();
+    private HashSet<string> availableTags = new();
+    private bool showTagSuggestions = false;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         username = UserService.GetUsername();
         if (string.IsNullOrEmpty(username))
@@ -78,22 +178,167 @@
             return;
         }
 
-        // Fetch transactions for the user from the service
-        transactions = UserService.GetTransactions(username);
+        await LoadTransactionsAsync();
+        ExtractAvailableTags();
     }
 
-    private void NavigateToCashIn()
+    private async Task LoadTransactionsAsync()
     {
-        Navigation.NavigateTo("/cashin");
+        await InvokeAsync(() =>
+        {
+            transactions = UserService.GetTransactions(username);
+            StateHasChanged();
+        });
     }
 
-    private void NavigateToCashOut()
+    private void ExtractAvailableTags()
     {
-        Navigation.NavigateTo("/cashout");
+        availableTags = new HashSet<string>(
+            transactions.SelectMany(t => t.tags).Distinct()
+        );
     }
 
-    private void NavigateToDebt()
+    private string GetFilterButtonClass(string filter)
     {
-        Navigation.NavigateTo("/debts");
+        return filter == currentFilter
+            ? "px-4 py-2 bg-blue-500 text-white rounded-md"
+            : "px-4 py-2 bg-gray-100 rounded-md";
+    }
+
+    private string GetTransactionIconClass(string type)
+    {
+        return type.ToLower() switch
+        {
+            "income" => "p-2 rounded-lg bg-green-100 text-green-600",
+            "expense" => "p-2 rounded-lg bg-red-100 text-red-600",
+            _ => "p-2 rounded-lg bg-gray-100 text-gray-600"
+        };
+    }
+
+    private string GetAmountClass(string type)
+    {
+        return type.ToLower() switch
+        {
+            "income" => "font-medium text-green-600",
+            "expense" => "font-medium text-red-600",
+            _ => "font-medium text-gray-600"
+        };
+    }
+
+    private string GetTransactionIcon(string type)
+    {
+        return type.ToLower() switch
+        {
+            "income" => "IN",
+            "expense" => "OUT",
+            _ => "-"
+        };
+    }
+
+    private string GetFormattedAmount(TransactionModel transaction)
+    {
+        return $"{(transaction.transactionType == "Expense" ? "-" : "+")}{transaction.Currency} {transaction.amount}";
+    }
+
+    private void ShowTagSuggestions()
+    {
+        showTagSuggestions = true;
+    }
+
+    private async Task HandleTagBlur()
+    {
+        await Task.Delay(200);
+        await InvokeAsync(() =>
+        {
+            showTagSuggestions = false;
+            StateHasChanged();
+        });
+    }
+
+    private async Task SelectTag(string tag)
+    {
+        await InvokeAsync(() =>
+        {
+            if (!selectedTags.Contains(tag))
+            {
+                selectedTags.Add(tag);
+            }
+            tagSearchQuery = "";
+            showTagSuggestions = false;
+            StateHasChanged();
+        });
+    }
+
+    private async Task AddCustomTag(string newTag)
+    {
+        if (!string.IsNullOrWhiteSpace(newTag) && !availableTags.Contains(newTag))
+        {
+            await InvokeAsync(() =>
+            {
+                availableTags.Add(newTag);
+                SelectTag(newTag);
+            });
+        }
+    }
+
+    private IEnumerable<TransactionModel> FilteredTransactions
+    {
+        get
+        {
+            var query = transactions.AsEnumerable();
+
+            if (!string.IsNullOrWhiteSpace(searchQuery))
+            {
+                query = query.Where(t =>
+                    t.title.Contains(searchQuery, StringComparison.OrdinalIgnoreCase) ||
+                    t.notes?.Contains(searchQuery, StringComparison.OrdinalIgnoreCase) == true
+                );
+            }
+
+            if (selectedTags.Any())
+            {
+                query = query.Where(t =>
+                    selectedTags.All(selectedTag =>
+                        t.tags.Any(transactionTag =>
+                            transactionTag.Contains(selectedTag, StringComparison.OrdinalIgnoreCase)
+                        )
+                    )
+                );
+            }
+
+            if (currentFilter != "all")
+            {
+                query = query.Where(t =>
+                    t.transactionType.Equals(
+                        currentFilter == "income" ? "Income" : "Expense",
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                );
+            }
+
+            query = sortOption switch
+            {
+                "date_asc" => query.OrderBy(t => t.date),
+                "date_desc" => query.OrderByDescending(t => t.date),
+                "amount_asc" => query.OrderBy(t => t.amount),
+                "amount_desc" => query.OrderByDescending(t => t.amount),
+                _ => query.OrderByDescending(t => t.date)
+            };
+
+            return query;
+        }
+    }
+
+    private void FilterTransactions(string filter)
+    {
+        currentFilter = filter;
+    }
+
+    private void ToggleTagFilter(string tag)
+    {
+        if (selectedTags.Contains(tag))
+            selectedTags.Remove(tag);
+        else
+            selectedTags.Add(tag);
     }
 }

@@ -1,28 +1,25 @@
-﻿using System.Security.Cryptography;
+﻿
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
 public class userService
 {
-
     private string _currentUsername;
+    private readonly string FilePath;
+    private static int userCounter = 0;
+    private static int transactionCounter = 0;
+    private static int debtCounter = 0;  // Added for debt tracking
 
-    // Set the current username when the user logs in
     public void SetUsername(string username)
     {
         _currentUsername = username;
     }
 
-    // Get the current username
     public string GetUsername()
     {
         return _currentUsername;
     }
-
-    private readonly string FilePath;
-    private static int userCounter = 0;
-    private static int transactionCounter = 0;
-
 
     public userService()
     {
@@ -32,14 +29,16 @@ public class userService
         if (users.Any())
         {
             var allTransactions = users.SelectMany(u => u.transactions).ToList();
+            var allDebts = users.SelectMany(u => u.debts).ToList();
 
             if (allTransactions.Any())
             {
                 transactionCounter = allTransactions.Max(t => int.Parse(t.transactionID));
             }
-            else
+
+            if (allDebts.Any())
             {
-                transactionCounter = 0; // No transactions exist, so start from 0
+                debtCounter = allDebts.Count;
             }
 
             userCounter = users.Max(u => u.userID);
@@ -72,7 +71,7 @@ public class userService
         using var sha256 = SHA256.Create();
         var bytes = Encoding.UTF8.GetBytes(password);
         var hash = sha256.ComputeHash(bytes);
-        return Convert.ToBase64String(hash); // Return hashed password
+        return Convert.ToBase64String(hash);
     }
 
     public bool ValidatePassword(string inputPassword, string storedPassword)
@@ -87,11 +86,10 @@ public class userService
 
         if (users.Any(u => u.username == username || u.email == email))
         {
-            return false; // Username or email already exists
+            return false;
         }
 
         userCounter++;
-
 
         var newUser = new userModel
         {
@@ -100,6 +98,7 @@ public class userService
             email = email,
             password = HashPassword(password),
             transactions = new List<TransactionModel>(),
+            debts = new List<DebtModel>(),
             currency = currency
         };
 
@@ -119,20 +118,19 @@ public class userService
         return null;
     }
 
-
     public string? GetUserCurrency(string username)
     {
-        var users = LoadUsers(); // Load all users
+        var users = LoadUsers();
         var user = users.FirstOrDefault(u => u.username == username);
 
         if (user == null)
         {
             Console.WriteLine($"User {username} not found.");
-            return null; // Return null if user is not found
+            return null;
         }
 
         Console.WriteLine($"Currency for {username} is {user.currency}.");
-        return user.currency; // Return the user's preferred currency
+        return user.currency;
     }
 
     public decimal GetCurrentBalance(string username)
@@ -143,12 +141,11 @@ public class userService
         if (user == null)
         {
             Console.WriteLine($"User {username} not found.");
-            return 0; // Return 0 if the user is not found
+            return 0;
         }
 
         decimal balance = 0;
 
-        // Calculate balance based on transaction type
         foreach (var transaction in user.transactions)
         {
             if (transaction.transactionType == "Income")
@@ -165,8 +162,6 @@ public class userService
         return balance;
     }
 
-
-
     public bool AddTransaction(string username, TransactionModel transaction)
     {
         var users = LoadUsers();
@@ -174,21 +169,18 @@ public class userService
         if (user == null)
         {
             Console.WriteLine($"User {username} not found.");
-            return false; // User not found
+            return false;
         }
 
-        transaction.transactionID = (transactionCounter++).ToString(); // Ensure unique ID
+        transaction.transactionID = (transactionCounter++).ToString();
         transaction.Currency = user.currency;
 
         user.transactions.Add(transaction);
         Console.WriteLine($"Adding transaction for {username}: {transaction.title} - {transaction.amount}");
 
-        // Save the updated users list to file
         SaveUsers(users);
         return true;
     }
-
-
 
     public List<TransactionModel>? GetTransactions(string username)
     {
@@ -197,7 +189,7 @@ public class userService
         if (user == null)
         {
             Console.WriteLine($"User {username} not found.");
-            return null; // Return null if user is not found
+            return null;
         }
 
         Console.WriteLine($"Returning transactions for {username}. Total transactions: {user.transactions.Count}");
@@ -209,5 +201,112 @@ public class userService
         var transactions = GetTransactions(username);
         return transactions?.Where(predicate).ToList();
     }
+
+    // New Debt Management Methods
+    public List<DebtModel> GetDebts(string username)
+    {
+        var users = LoadUsers();
+        var user = users.FirstOrDefault(u => u.username == username);
+        return user?.debts ?? new List<DebtModel>();
+    }
+
+    public bool AddDebt(string username, DebtModel debt)
+    {
+        var users = LoadUsers();
+        var user = users.FirstOrDefault(u => u.username == username);
+        if (user == null) return false;
+
+        debtCounter++;
+        debt.DebtID = $"DEBT_{debtCounter}";
+        debt.Currency = user.currency;
+        user.debts.Add(debt);
+
+        // Create corresponding transaction
+        var debtTransaction = new TransactionModel
+        {
+            title = $"Debt: {debt.Title}",
+            amount = debt.OriginalAmount,
+            transactionType = "Debt",
+            date = DateTime.Now,
+            notes = debt.Notes,
+            tags = debt.Tags,
+            Currency = debt.Currency,
+        };
+
+        AddTransaction(username, debtTransaction);
+        SaveUsers(users);
+        return true;
+    }
+
+    public bool ClearDebt(string username, string debtId, decimal amountToRepay)
+    {
+        var users = LoadUsers();
+        var user = users.FirstOrDefault(u => u.username == username);
+        if (user == null) return false;
+
+        var debt = user.debts.FirstOrDefault(d => d.DebtID == debtId);
+        if (debt == null) return false;
+
+        if (amountToRepay > debt.RemainingAmount)
+        {
+            return false;
+        }
+
+        decimal currentBalance = GetCurrentBalance(username);
+        if (currentBalance < amountToRepay)
+        {
+            return false;
+        }
+
+        // Update debt
+        debt.RemainingAmount -= amountToRepay;
+
+        // Create repayment transaction
+        var repaymentTransaction = new TransactionModel
+        {
+            title = $"Debt Repayment: {debt.Title}",
+            amount = amountToRepay,
+            transactionType = "Expense",
+            date = DateTime.Now,
+            notes = $"Repayment for debt: {debt.Title}",
+            tags = new List<string> { "Debt Repayment" },
+            Currency = debt.Currency,
+        };
+
+        AddTransaction(username, repaymentTransaction);
+
+        if (debt.RemainingAmount <= 0)
+        {
+            debt.IsCleared = true;
+            debt.RemainingAmount = 0;
+            debt.ClearedDate = DateTime.Now;
+        }
+
+        SaveUsers(users);
+        return true;
+    }
+
+    public decimal GetTotalDebt(string username)
+    {
+        var debts = GetDebts(username);
+        return debts.Where(d => !d.IsCleared).Sum(d => d.RemainingAmount);
+    }
+
+    public List<DebtModel> GetActiveDebts(string username)
+    {
+        return GetDebts(username).Where(d => !d.IsCleared).ToList();
+    }
+
+    public List<DebtModel> GetClearedDebts(string username)
+    {
+        return GetDebts(username).Where(d => d.IsCleared).ToList();
+    }
 }
+
+
+
+
+
+
+
 

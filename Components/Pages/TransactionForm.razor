@@ -1,68 +1,202 @@
-﻿@code {
+﻿@page "/transactionform/{transactionType}"
+@using PrameshBudgetTracker.Components.Layout
+@layout SecondLayout
+
+@inject NavigationManager Navigation
+@inject userService UserService
+
+<div class="max-w-2xl mx-auto p-4">
+    <div class="bg-gray-50 rounded-lg p-6">
+        <h2 class="text-xl font-medium mb-6">
+            @(transactionType == "Income" ? "Cash Inflow" : "Cash Outflow")
+        </h2>
+
+        <div class="space-y-4">
+            <!-- Amount -->
+            <div class="space-y-2">
+                <label class="block text-sm text-gray-600">Amount</label>
+                <input @bind="newTransaction.amount" type="number" step="0.01"
+                       class="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+            </div>
+
+            <!-- Source/Recipient -->
+            <div class="space-y-2">
+                <label class="block text-sm text-gray-600">
+                    @(transactionType == "Income" ? "Source" : "Recipient")
+                </label>
+                <input @bind="newTransaction.title" type="text"
+                       class="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+            </div>
+
+            <!-- Category Section -->
+            <div class="space-y-2">
+                <label class="block text-sm text-gray-600">Category</label>
+                <div class="flex gap-2">
+                    <select @bind="selectedTag"
+                            class="flex-1 p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <option value="">Select Category</option>
+                        <option value="Salary">Salary</option>
+                        <option value="Rent">Rent</option>
+                        <option value="Utilities">Utilities</option>
+                        <option value="Groceries">Groceries</option>
+                        <option value="Transportation">Transportation</option>
+                    </select>
+                    <button @onclick="AddTag"
+                            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition duration-200">
+                        Add
+                    </button>
+                </div>
+
+                <!-- Custom Category Input -->
+                <div class="flex gap-2 mt-2">
+                    <input @bind="customTag" type="text" placeholder="Add Custom Category"
+                           class="flex-1 p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                    <button @onclick="AddCustomTag"
+                            class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition duration-200">
+                        Add Custom
+                    </button>
+                </div>
+
+                @if (newTransaction.tags.Any())
+                {
+                    <div class="mt-2">
+                        <p class="text-sm text-gray-600">Selected Categories:</p>
+                        <div class="flex flex-wrap gap-2 mt-1">
+                            @foreach (var tag in newTransaction.tags)
+                            {
+                                <span class="px-2 py-1 bg-blue-100 text-blue-800 rounded-md text-sm">
+                                    @tag
+                                    <button @onclick="@(() => RemoveTag(tag))" class="ml-2 text-blue-600 hover:text-blue-800">×</button>
+                                </span>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <!-- Date -->
+            <div class="space-y-2">
+                <label class="block text-sm text-gray-600">Date</label>
+                <input @bind="newTransaction.date" type="date"
+                       class="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+            </div>
+
+            <!-- Notes -->
+            <div class="space-y-2">
+                <label class="block text-sm text-gray-600">Notes</label>
+                <textarea @bind="newTransaction.notes" rows="3"
+                          class="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"></textarea>
+            </div>
+
+            <!-- Submit Button -->
+            <button @onclick="AddTransaction"
+                    class="w-full py-2 bg-blue-900 text-white font-medium rounded-md hover:bg-blue-800 transition duration-200">
+                @(transactionType == "Income" ? "Cash In" : "Cash Out")
+            </button>
+        </div>
+
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <p class="mt-4 text-red-500 text-sm">@errorMessage</p>
+        }
+    </div>
+</div>
+
+@if (showDebtPrompt)
+{
+    <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+        <div class="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
+            @if (!showDebtForm)
+            {
+                <div>
+                    <h3 class="text-lg font-semibold mb-4">Insufficient Balance</h3>
+                    <p>Would you like to take a debt for this transaction?</p>
+                    <div class="mt-4 flex justify-end space-x-4">
+                        <button @onclick="CancelDebt" class="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600">
+                            Cancel
+                        </button>
+                        <button @onclick="ShowDebtForm" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+                            Take Debt
+                        </button>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div>
+                    <h3 class="text-lg font-semibold mb-4">Create New Debt</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Title</label>
+                            <input @bind="newDebt.Title" type="text"
+                                   class="mt-1 w-full px-3 py-2 border rounded-md" />
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Amount</label>
+                            <p class="mt-1">@insufficientAmount.ToString("C")</p>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Due Date</label>
+                            <input @bind="newDebt.DueDate" type="date"
+                                   class="mt-1 w-full px-3 py-2 border rounded-md" />
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Notes</label>
+                            <textarea @bind="newDebt.Notes" rows="3"
+                                      class="mt-1 w-full px-3 py-2 border rounded-md"></textarea>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(debtError))
+                        {
+                            <p class="text-red-500 text-sm">@debtError</p>
+                        }
+
+                        <div class="flex justify-end space-x-4">
+                            <button @onclick="CancelDebt" class="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600">
+                                Cancel
+                            </button>
+                            <button @onclick="CreateDebt" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+                                Create Debt
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
     [Parameter]
-    public string transactionType { get; set; } // Determines the type of transaction: Income, Expense, or Debt.
+    public string transactionType { get; set; }
 
     private string username;
     private string errorMessage;
+    private string debtError;
     private string selectedTag;
     private string customTag;
+
     private TransactionModel newTransaction = new TransactionModel();
+    private DebtModel newDebt = new DebtModel();
+    private bool showDebtPrompt;
+    private bool showDebtForm;
+    private decimal insufficientAmount;
 
-    [Inject]
-    private userService UserService { get; set; }
-    [Inject]
-    private NavigationManager Navigation { get; set; }
-
-    protected override void OnInitialized() 
+    protected override void OnInitialized()
     {
         username = UserService.GetUsername();
         if (string.IsNullOrEmpty(username))
         {
             errorMessage = "No user found. Please log in.";
-        }
-
-        newTransaction.transactionType = transactionType; // Set the transaction type dynamically.
-    }
-
-    private void AddTransaction()
-    {
-        if (string.IsNullOrEmpty(username))
-        {
-            errorMessage = "You must be logged in to add a transaction.";
             return;
         }
 
-        if (string.IsNullOrEmpty(newTransaction.title) || newTransaction.amount <= 0)
-        {
-            errorMessage = "Please provide valid transaction details.";
-            return;
-        }
-
-        if (transactionType == "Expense")
-        {
-            decimal currentBalance = UserService.GetCurrentBalance(username);
-            if (newTransaction.amount > currentBalance)
-            {
-                errorMessage = $"Insufficient balance. Your current balance is {currentBalance:C}.";
-                return;
-            }
-        }
-
+        newTransaction.transactionType = transactionType;
         newTransaction.date = DateTime.Now;
-        newTransaction.Currency = UserService.GetUserCurrency(username) ?? "NPR";
-        newTransaction.isDebtCleared = false;
-
-        bool result = UserService.AddTransaction(username, newTransaction);
-
-        if (result)
-        {
-            errorMessage = "";
-            Navigation.NavigateTo("/dashboard");
-        }
-        else
-        {
-            errorMessage = "Failed to add transaction. Please try again.";
-        }
+        newDebt.DueDate = DateTime.Now.AddMonths(1);
     }
 
     private void AddTag()
@@ -82,53 +216,98 @@
             customTag = "";
         }
     }
+
+    private void RemoveTag(string tag)
+    {
+        newTransaction.tags.Remove(tag);
+    }
+
+    private async Task AddTransaction()
+    {
+        if (string.IsNullOrEmpty(username))
+        {
+            errorMessage = "You must be logged in to add a transaction.";
+            return;
+        }
+
+        if (string.IsNullOrEmpty(newTransaction.title) || newTransaction.amount <= 0)
+        {
+            errorMessage = "Please provide valid transaction details.";
+            return;
+        }
+
+        if (transactionType == "Expense")
+        {
+            decimal currentBalance = UserService.GetCurrentBalance(username);
+            if (newTransaction.amount > currentBalance)
+            {
+                insufficientAmount = newTransaction.amount - currentBalance;
+                showDebtPrompt = true;
+                return;
+            }
+        }
+
+        CompleteTransaction();
+    }
+
+    private void CompleteTransaction()
+    {
+        newTransaction.Currency = UserService.GetUserCurrency(username) ?? "NPR";
+        bool result = UserService.AddTransaction(username, newTransaction);
+
+        if (result)
+        {
+            Navigation.NavigateTo("/dashboard");
+        }
+        else
+        {
+            errorMessage = "Failed to add transaction. Please try again.";
+        }
+    }
+
+    private void ShowDebtForm()
+    {
+        showDebtForm = true;
+        newDebt.OriginalAmount = insufficientAmount;
+        newDebt.RemainingAmount = insufficientAmount;
+        newDebt.Tags = new List<string> { "Debt" };
+        if (!string.IsNullOrEmpty(newTransaction.title))
+        {
+            newDebt.Title = $"Debt for: {newTransaction.title}";
+        }
+    }
+
+    private void CancelDebt()
+    {
+        showDebtPrompt = false;
+        showDebtForm = false;
+        errorMessage = "Transaction cancelled due to insufficient balance.";
+        debtError = "";
+        newDebt = new DebtModel { DueDate = DateTime.Now.AddMonths(1) };
+    }
+
+    private void CreateDebt()
+    {
+        if (string.IsNullOrEmpty(newDebt.Title))
+        {
+            debtError = "Please enter a title for the debt.";
+            return;
+        }
+
+        if (newDebt.DueDate <= DateTime.Now)
+        {
+            debtError = "Due date must be in the future.";
+            return;
+        }
+
+        bool success = UserService.AddDebt(username, newDebt);
+        if (success)
+        {
+            CompleteTransaction();
+        }
+        else
+        {
+            debtError = "Failed to create debt. Please try again.";
+        }
+    }
 }
-
-<div class="transaction-form-container max-w-lg mx-auto">
-    <div class="form-box bg-white p-8 rounded-lg shadow-lg">
-        <h1 class="text-2xl font-bold mb-4">@transactionType Transaction</h1>
-        <div class="space-y-4">
-            <!-- Title Input -->
-            <input @bind="newTransaction.title" type="text" placeholder="Title"
-                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
-
-            <!-- Amount Input -->
-            <input @bind="newTransaction.amount" type="number" placeholder="Amount"
-                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
-
-            <!-- Notes Textarea -->
-            <textarea @bind="newTransaction.notes" placeholder="Notes"
-                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
-
-            <!-- Tags Section -->
-            <div class="flex flex-col space-y-2">
-                <label for="tagSelector" class="font-medium text-gray-700">Select or Add Tags:</label>
-                <div class="flex flex-wrap gap-2">
-                    <select @bind="selectedTag" class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="">-- Select a Tag --</option>
-                        <option value="Groceries">Groceries</option>
-                        <option value="Rent">Rent</option>
-                        <option value="Utilities">Utilities</option>
-                    </select>
-                    <button @onclick="AddTag" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none">Add Tag</button>
-                </div>
-                <div class="flex flex-col">
-                    <input @bind="customTag" type="text" placeholder="Add Custom Tag" 
-                        class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mb-2" />
-                    <button @onclick="AddCustomTag" class="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 focus:outline-none">
-                        Add Custom Tag
-                    </button>
-                </div>
-            </div>
-
-            <p class="text-sm text-gray-500">Tags: @string.Join(", ", newTransaction.tags)</p>
-
-            <!-- Submit Button -->
-            <button @onclick="AddTransaction"
-                    class="w-full py-2 bg-green-500 text-white font-medium rounded-lg hover:bg-green-600 transition duration-200">
-                Save Transaction
-            </button>
-        </div>
-        <p class="text-red-500 text-sm mt-4">@errorMessage</p>
-    </div>
-</div>

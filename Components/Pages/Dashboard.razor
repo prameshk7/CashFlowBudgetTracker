@@ -5,99 +5,175 @@
 @inject NavigationManager Navigation
 @inject userService UserService
 
-<p class="text-xl font-semibold mb-4">Logged in as: @username</p>
-
-<div class="page mt-4">
-    <main>
-        <div class="top-row px-4 mb-6">
-            <h1 class="text-3xl font-bold">Dashboard</h1>
+<div class="min-h-screen bg-gray-100">
+    <div class="max-w-7xl mx-auto py-6 px-4">
+        <!-- Header with Balance -->
+        <div class="bg-slate-800 p-6 rounded-xl mb-6 text-white">
+            <div class="flex justify-between items-center">
+                <p class="text-xl font-semibold">Welcome, @username</p>
+                <div class="text-right">
+                    <p class="text-sm text-gray-300">Current Balance (@currency)</p>
+                    <p class="text-2xl font-bold">@currentBalance.ToString("N2")</p>
+                </div>
+            </div>
         </div>
 
-        <!-- Transaction Filters -->
-        <div class="filter-section bg-white p-4 rounded-lg shadow-lg mb-6">
-            <h2 class="text-lg font-semibold mb-4">Filters</h2>
+        <div class="grid grid-cols-12 gap-6">
+            <!-- Sidebar Section -->
+            <div class="col-span-3">
+                <div class="space-y-4">
+                    <button @onclick="ShowCashInModal" class="w-full flex items-center gap-3 px-6 py-4 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 transition-colors">
+                        <span class="material-icons text-xl">arrow_downward</span>
+                        <span class="font-medium">Cash In</span>
+                    </button>
 
-            <label for="transactionType">Transaction Type:</label>
-            <select id="transactionType" @bind="selectedTransactionType" class="mb-4">
-                <option value="">All</option>
-                <option value="Income">Income</option>
-                <option value="Expense">Expense</option>
-            </select>
+                    <button @onclick="ShowDebtsModal" class="w-full flex items-center gap-3 px-6 py-4 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition-colors">
+                        <span class="material-icons text-xl">account_balance_wallet</span>
+                        <span class="font-medium">Debts (@activeDebts)</span>
+                    </button>
 
-            <label for="tags">Tags:</label>
-            <input type="text" id="tags" @bind="tagFilter" placeholder="Search by tags" class="mb-4" />
+                    <button @onclick="ShowCashOutModal" class="w-full flex items-center gap-3 px-6 py-4 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors">
+                        <span class="material-icons text-xl">arrow_upward</span>
+                        <span class="font-medium">Cash Out</span>
+                    </button>
+                </div>
+            </div>
 
-            <label for="dateRange">Date Range:</label>
-            <input type="date" @bind="startDate" />
-            <input type="date" @bind="endDate" class="mb-4" />
+            <!-- Main Content Section -->
+            <div class="col-span-9 space-y-6">
+                <!-- Transaction Summary -->
+                <div class="bg-white p-6 rounded-xl shadow-sm">
+                    <h2 class="text-xl font-semibold mb-4">Transaction Summary</h2>
+                    <div class="grid grid-cols-3 gap-4">
+                        <div class="p-4 bg-gray-50 rounded-lg">
+                            <p class="text-gray-600">Total Transactions</p>
+                            <p class="text-2xl font-bold">@totalTransactions</p>
+                        </div>
+                        <div class="p-4 bg-emerald-50 rounded-lg">
+                            <p class="text-emerald-600">Total Inflows</p>
+                            <p class="text-2xl font-bold text-emerald-700">@totalInflow.ToString("N2")</p>
+                        </div>
+                        <div class="p-4 bg-red-50 rounded-lg">
+                            <p class="text-red-600">Total Outflows</p>
+                            <p class="text-2xl font-bold text-red-700">@totalOutflow.ToString("N2")</p>
+                        </div>
+                        <div class="p-4 bg-blue-50 rounded-lg">
+                            <p class="text-blue-600">Highest Inflow</p>
+                            <p class="text-2xl font-bold text-blue-700">@highestInflow.ToString("N2")</p>
+                        </div>
+                        <div class="p-4 bg-orange-50 rounded-lg">
+                            <p class="text-orange-600">Highest Outflow</p>
+                            <p class="text-2xl font-bold text-orange-700">@highestOutflow.ToString("N2")</p>
+                        </div>
+                        <div class="p-4 bg-purple-50 rounded-lg">
+                            <p class="text-purple-600">Balance Status</p>
+                            <p class="text-2xl font-bold text-purple-700">@(currentBalance >= 0 ? "Positive" : "Negative")</p>
+                        </div>
+                    </div>
+                </div>
 
-            <label for="search">Search by Title:</label>
-            <input type="text" id="search" @bind="searchQuery" placeholder="Search by title" class="mb-4" />
+                <!-- Filters Section -->
+                <div class="bg-white p-6 rounded-xl shadow-sm">
+                    <h2 class="text-lg font-semibold mb-4">Filters</h2>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Transaction Type</label>
+                            <select @bind="selectedTransactionType" class="w-full rounded-lg border-gray-300">
+                                <option value="">All</option>
+                                <option value="Income">Income</option>
+                                <option value="Expense">Expense</option>
+                                <option value="Debt">Debt</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Tags</label>
+                            <input type="text" @bind="tagFilter" placeholder="Search by tags"
+                                   class="w-full rounded-lg border-gray-300" />
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                            <input type="date" @bind="startDate"
+                                   class="w-full rounded-lg border-gray-300" />
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                            <input type="date" @bind="endDate"
+                                   class="w-full rounded-lg border-gray-300" />
+                        </div>
+                        <div class="col-span-2">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Search by Title</label>
+                            <input type="text" @bind="searchQuery" placeholder="Search by title"
+                                   class="w-full rounded-lg border-gray-300" />
+                        </div>
+                        <div class="col-span-2">
+                            <button @onclick="ApplyFilters"
+                                    class="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors">
+                                Apply Filters
+                            </button>
+                        </div>
+                    </div>
+                </div>
 
-            <!-- Apply Filter Button -->
-            <button class="bg-blue-500 text-white p-2 rounded-lg" @onclick="ApplyFilters">Apply Filters</button>
+
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                @foreach (var transaction in filteredTransactions.OrderByDescending(t => t.date).Take(5))
+                                {
+                                    <tr class="hover:bg-gray-50">
+                                        <td class="px-6 py-4 whitespace-nowrap">@transaction.title</td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <span class="@(transaction.transactionType == "Income" ? "text-emerald-600" : "text-red-600")">
+                                                @transaction.amount.ToString("N2") @currency
+                                            </span>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <span class="@(transaction.transactionType == "Income" ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800") px-2 py-1 rounded-full text-sm">
+                                                @transaction.transactionType
+                                            </span>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-gray-500">
+                                            @transaction.date.ToString("MMM dd, yyyy")
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
         </div>
-
-        <!-- Transaction Summary -->
-        <div class="summary-section bg-white p-4 rounded-lg shadow-lg mb-6">
-            <h2 class="text-xl font-semibold mb-4">Transaction Summary</h2>
-            <p>Total Transactions: @filteredTransactions.Count()</p>
-            <p>Total Inflows: @totalInflow</p>
-            <p>Total Outflows: @totalOutflow</p>
-            <p>Highest Inflow: @highestInflow</p>
-            <p>Lowest Outflow: @lowestOutflow</p>
-            <p>Current Balance: @currentBalance</p> <!-- Display Current Balance -->
-            <p>Sufficient Balance for Outflows: @sufficientBalance</p>
-        </div>
-
-        <!-- Transaction List -->
-        <div class="transaction-list bg-white p-4 rounded-lg shadow-lg">
-            <h2 class="text-lg font-semibold mb-4">Transactions</h2>
-            <table class="min-w-full table-auto">
-                <thead>
-                    <tr>
-                        <th class="px-4 py-2">Title</th>
-                        <th class="px-4 py-2">Amount</th>
-                        <th class="px-4 py-2">Type</th>
-                        <th class="px-4 py-2">Date</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var transaction in filteredTransactions.OrderByDescending(t => t.date))
-                    {
-                            <tr>
-                                <td class="px-4 py-2">@transaction.title</td>
-                                <td class="px-4 py-2">@transaction.amount</td>
-                                <td class="px-4 py-2">@transaction.transactionType</td>
-                                <td class="px-4 py-2">@transaction.date.ToString("yyyy-MM-dd")</td>
-                            </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
-    </main>
-</div>
+    </div>
 
 @code {
     private string username;
-    private List<TransactionModel> allTransactions = new List<TransactionModel>();
-    private List<TransactionModel> filteredTransactions = new List<TransactionModel>();
-
-    private string selectedTransactionType = "";
-    private string tagFilter = "";
-    private string searchQuery = "";
-    private DateTime? startDate = null;
-    private DateTime? endDate = null;
-
+    private string currency;
+    private decimal currentBalance = 0;
     private int totalTransactions = 0;
     private decimal totalInflow = 0;
     private decimal totalOutflow = 0;
     private decimal highestInflow = 0;
-    private decimal lowestOutflow = 0;
-    private decimal currentBalance = 0; // Track current balance
-    private string sufficientBalance = "Yes"; // Default assumption for sufficient balance
+    private decimal highestOutflow = 0;
+    private int activeDebts = 0;
 
-    protected override void OnInitialized()
+    private string selectedTransactionType = "";
+    private string tagFilter = "";
+    private DateTime startDate = DateTime.Now.AddMonths(-1);
+    private DateTime endDate = DateTime.Now;
+    private string searchQuery = "";
+
+    private List<TransactionModel> allTransactions = new();
+    private List<TransactionModel> filteredTransactions = new();
+
+    protected override async Task OnInitializedAsync()
     {
         username = UserService.GetUsername();
         if (string.IsNullOrEmpty(username))
@@ -106,82 +182,59 @@
             return;
         }
 
-        LoadTransactions();
-        FilterTransactions();
-        CalculateSummary();
+        currency = UserService.GetUserCurrency(username) ?? "NPR";
+        currentBalance = UserService.GetCurrentBalance(username);
+        allTransactions = UserService.GetTransactions(username) ?? new();
+        activeDebts = UserService.GetActiveDebts(username).Count;
+
+        CalculateTransactionMetrics();
+        ApplyFilters();
     }
 
-    private void LoadTransactions()
+    private void CalculateTransactionMetrics()
     {
-        // Load all transactions from the service (replace with actual logic)
-        allTransactions = UserService.GetTransactions(username) ?? new List<TransactionModel>();
+        totalTransactions = allTransactions.Count;
+
+        var incomeTransactions = allTransactions.Where(t => t.transactionType == "Income");
+        var expenseTransactions = allTransactions.Where(t => t.transactionType != "Income");
+
+        totalInflow = incomeTransactions.Sum(t => t.amount);
+        totalOutflow = expenseTransactions.Sum(t => t.amount);
+
+        highestInflow = incomeTransactions.Any() ? incomeTransactions.Max(t => t.amount) : 0;
+        highestOutflow = expenseTransactions.Any() ? expenseTransactions.Max(t => t.amount) : 0;
     }
 
     private void ApplyFilters()
     {
-        FilterTransactions();
-        CalculateSummary();
+        filteredTransactions = allTransactions
+            .Where(t => string.IsNullOrEmpty(selectedTransactionType) || t.transactionType == selectedTransactionType)
+            .Where(t => string.IsNullOrEmpty(tagFilter) || t.tags.Any(tag => tag.Contains(tagFilter, StringComparison.OrdinalIgnoreCase)))
+            .Where(t => t.date >= startDate && t.date <= endDate)
+            .Where(t => string.IsNullOrEmpty(searchQuery) ||
+                       t.title.Contains(searchQuery, StringComparison.OrdinalIgnoreCase) ||
+                       t.notes.Contains(searchQuery, StringComparison.OrdinalIgnoreCase))
+            .ToList();
     }
 
-    private void FilterTransactions()
+    private void FilterByType(string type)
     {
-        // Ensure the transactions list is not null before filtering
-        if (allTransactions != null)
-        {
-            filteredTransactions = allTransactions;
-
-            // Apply filters for transaction type, tags, and date range
-            if (!string.IsNullOrEmpty(selectedTransactionType))
-            {
-                filteredTransactions = filteredTransactions.Where(t => t.transactionType == selectedTransactionType).ToList();
-            }
-
-            if (!string.IsNullOrEmpty(tagFilter))
-            {
-                filteredTransactions = filteredTransactions.Where(t => t.tags.Contains(tagFilter)).ToList();
-            }
-
-            if (startDate.HasValue)
-            {
-                filteredTransactions = filteredTransactions.Where(t => t.date >= startDate.Value).ToList();
-            }
-
-            if (endDate.HasValue)
-            {
-                filteredTransactions = filteredTransactions.Where(t => t.date <= endDate.Value).ToList();
-            }
-
-            if (!string.IsNullOrEmpty(searchQuery))
-            {
-                filteredTransactions = filteredTransactions.Where(t => t.title.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)).ToList();
-            }
-        }
-        else
-        {
-            filteredTransactions = new List<TransactionModel>();
-        }
+        selectedTransactionType = type;
+        ApplyFilters();
     }
 
-    private void CalculateSummary()
+    private void ShowCashInModal()
     {
-        // Ensure filtered transactions is not null before calculating summary
-        if (filteredTransactions != null)
-        {
-            totalTransactions = filteredTransactions.Count;
-            totalInflow = filteredTransactions.Where(t => t.transactionType == "Income").Sum(t => t.amount);
-            totalOutflow = filteredTransactions.Where(t => t.transactionType == "Expense").Sum(t => t.amount);
+        Navigation.NavigateTo("/cashin");
+    }
 
-            highestInflow = filteredTransactions.Where(t => t.transactionType == "Income").Any() ?
-                             filteredTransactions.Where(t => t.transactionType == "Income").Max(t => t.amount) : 0;
+    private void ShowDebtsModal()
+    {
+        Navigation.NavigateTo("/debts");
+    }
 
-            lowestOutflow = filteredTransactions.Where(t => t.transactionType == "Expense").Any() ?
-                            filteredTransactions.Where(t => t.transactionType == "Expense").Min(t => t.amount) : 0;
-
-            // Track current balance
-            currentBalance = totalInflow - totalOutflow;
-
-            // Update sufficient balance logic
-            sufficientBalance = currentBalance > 0 ? "Yes" : "No"; // No outflows if balance is 0
-        }
+    private void ShowCashOutModal()
+    {
+        Navigation.NavigateTo("/cashout");
     }
 }
