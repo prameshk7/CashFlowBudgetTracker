@@ -9,7 +9,8 @@ public class userService
     private readonly string FilePath;
     private static int userCounter = 0;
     private static int transactionCounter = 0;
-    private static int debtCounter = 0;  // Added for debt tracking
+    private static int debtCounter = 0; 
+    private readonly currencyService _currencyService;
 
     public void SetUsername(string username)
     {
@@ -23,6 +24,7 @@ public class userService
 
     public userService()
     {
+        _currencyService = new currencyService();
         FilePath = @"D:\AppDEV\CW-Data\users.json";
 
         var users = LoadUsers();
@@ -158,8 +160,9 @@ public class userService
             }
         }
 
-        Console.WriteLine($"Current balance for {username} is {balance:C}.");
-        return balance;
+        decimal convertedBalance = _currencyService.ConvertFromNPR(balance, user.currency);
+        Console.WriteLine($"Current balance for {username} is {_currencyService.FormatCurrency(convertedBalance, user.currency)}");
+        return convertedBalance;
     }
 
     public bool AddTransaction(string username, TransactionModel transaction)
@@ -172,11 +175,17 @@ public class userService
             return false;
         }
 
+        if (transaction.Currency != "NPR")
+        {
+            decimal amountInNPR = _currencyService.ConvertToNPR(transaction.amount, transaction.Currency);
+            transaction.amount = amountInNPR;
+            transaction.Currency = "NPR"; //database stores in NPR
+        }
+
         transaction.transactionID = (transactionCounter++).ToString();
-        transaction.Currency = user.currency;
 
         user.transactions.Add(transaction);
-        Console.WriteLine($"Adding transaction for {username}: {transaction.title} - {transaction.amount}");
+        Console.WriteLine($"Adding transaction for {username}: {transaction.title} - {_currencyService.FormatCurrency(transaction.amount, "NPR")} (NPR)");
 
         SaveUsers(users);
         return true;
@@ -192,8 +201,21 @@ public class userService
             return null;
         }
 
-        Console.WriteLine($"Returning transactions for {username}. Total transactions: {user.transactions.Count}");
-        return user.transactions;
+        var convertedTransactions = user.transactions.Select(t => new TransactionModel
+        {
+            transactionID = t.transactionID,
+            title = t.title,
+            amount = _currencyService.ConvertFromNPR(t.amount, user.currency),
+            transactionType = t.transactionType,
+            date = t.date,
+            notes = t.notes,
+            tags = t.tags,
+            Currency = user.currency
+        }).ToList();
+
+
+        Console.WriteLine($"Returning transactions for {username}. Total transactions: {convertedTransactions.Count}");
+        return convertedTransactions;
     }
 
     public List<TransactionModel>? FilterTransactions(string username, Func<TransactionModel, bool> predicate)
@@ -202,12 +224,29 @@ public class userService
         return transactions?.Where(predicate).ToList();
     }
 
-    // New Debt Management Methods
+    // for debts
     public List<DebtModel> GetDebts(string username)
     {
         var users = LoadUsers();
         var user = users.FirstOrDefault(u => u.username == username);
-        return user?.debts ?? new List<DebtModel>();
+        if (user == null) return new List<DebtModel>();
+
+        // Convert debt amounts from NPR to user's preferred currency
+        var convertedDebts = user.debts.Select(d => new DebtModel
+        {
+            DebtID = d.DebtID,
+            Title = d.Title,
+            OriginalAmount = _currencyService.ConvertFromNPR(d.OriginalAmount, user.currency),
+            RemainingAmount = _currencyService.ConvertFromNPR(d.RemainingAmount, user.currency),
+            DueDate = d.DueDate,
+            ClearedDate = d.ClearedDate,
+            Notes = d.Notes,
+            Tags = d.Tags,
+            IsCleared = d.IsCleared,
+            Currency = user.currency
+        }).ToList();
+
+        return convertedDebts;
     }
 
     public bool AddDebt(string username, DebtModel debt)
@@ -216,12 +255,19 @@ public class userService
         var user = users.FirstOrDefault(u => u.username == username);
         if (user == null) return false;
 
+        if (debt.Currency != "NPR")
+        {
+            debt.OriginalAmount = _currencyService.ConvertToNPR(debt.OriginalAmount, debt.Currency);
+            debt.RemainingAmount = debt.OriginalAmount;
+            debt.Currency = "NPR";
+        }
+
         debtCounter++;
         debt.DebtID = $"DEBT_{debtCounter}";
         debt.Currency = user.currency;
         user.debts.Add(debt);
 
-        // Create corresponding transaction
+        
         var debtTransaction = new TransactionModel
         {
             title = $"Debt: {debt.Title}",
@@ -230,7 +276,7 @@ public class userService
             date = DateTime.Now,
             notes = debt.Notes,
             tags = debt.Tags,
-            Currency = debt.Currency,
+            Currency = "NPR",
         };
 
         AddTransaction(username, debtTransaction);
@@ -246,6 +292,12 @@ public class userService
 
         var debt = user.debts.FirstOrDefault(d => d.DebtID == debtId);
         if (debt == null) return false;
+
+        if (user.currency != "NPR")
+        {
+            amountToRepay = _currencyService.ConvertToNPR(amountToRepay, user.currency);
+        }
+
 
         if (amountToRepay > debt.RemainingAmount)
         {
@@ -270,7 +322,7 @@ public class userService
             date = DateTime.Now,
             notes = $"Repayment for debt: {debt.Title}",
             tags = new List<string> { "Debt Repayment" },
-            Currency = debt.Currency,
+            Currency = "NPR",
         };
 
         AddTransaction(username, repaymentTransaction);
@@ -288,8 +340,16 @@ public class userService
 
     public decimal GetTotalDebt(string username)
     {
-        var debts = GetDebts(username);
-        return debts.Where(d => !d.IsCleared).Sum(d => d.RemainingAmount);
+        var users = LoadUsers();
+        var user = users.FirstOrDefault(u => u.username == username);
+        if (user == null) return 0;
+
+        decimal totalDebtInNPR = user.debts
+            .Where(d => !d.IsCleared)
+            .Sum(d => d.RemainingAmount);
+
+        // Convert total debt to user's preferred currency
+        return _currencyService.ConvertFromNPR(totalDebtInNPR, user.currency);
     }
 
     public List<DebtModel> GetActiveDebts(string username)
@@ -301,12 +361,39 @@ public class userService
     {
         return GetDebts(username).Where(d => d.IsCleared).ToList();
     }
+
+    public bool UpdateUserCurrency(string username, string newCurrency)
+    {
+        try
+        {
+            var users = LoadUsers();
+            var user = users.FirstOrDefault(u => u.username == username);
+
+            if (user == null)
+            {
+                Console.WriteLine($"User {username} not found.");
+                return false;
+            }
+
+            // Validate currency
+            if (newCurrency != "NPR" && newCurrency != "USD" && newCurrency != "GBP")
+            {
+                Console.WriteLine($"Invalid currency: {newCurrency}");
+                return false;
+            }
+
+            // Update the user's preferred currency
+            user.currency = newCurrency;
+
+            // Save the updated user list
+            SaveUsers(users);
+            Console.WriteLine($"Updated currency for {username} to {newCurrency}.");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error updating currency: {ex.Message}");
+            return false;
+        }
+    }
 }
-
-
-
-
-
-
-
-

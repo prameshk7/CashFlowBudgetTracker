@@ -7,19 +7,29 @@
 
 <div class="min-h-screen bg-gray-100">
     <div class="max-w-7xl mx-auto py-6 px-4">
-        <!-- Header with Balance -->
         <div class="bg-slate-800 p-6 rounded-xl mb-6 text-white">
             <div class="flex justify-between items-center">
                 <p class="text-xl font-semibold">Welcome, @username</p>
-                <div class="text-right">
-                    <p class="text-sm text-gray-300">Current Balance (@currency)</p>
-                    <p class="text-2xl font-bold">@currentBalance.ToString("N2")</p>
+                <div class="flex items-center gap-6">
+                    <div>
+                        <label class="block text-sm text-gray-300 mb-1">Currency</label>
+                        <select @bind="selectedCurrency" @bind:after="UpdateCurrency"
+                                class="bg-slate-700 text-white rounded-lg border-gray-600 px-3 py-1">
+                            <option value="NPR">NPR</option>
+                            <option value="USD">USD</option>
+                            <option value="GBP">GBP</option>
+                        </select>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-sm text-gray-300">Current Balance (@currency)</p>
+                        <p class="text-2xl font-bold">@currentBalance.ToString("N2")</p>
+                    </div>
                 </div>
             </div>
         </div>
 
         <div class="grid grid-cols-12 gap-6">
-            <!-- Sidebar Section -->
+            @* Sidebar *@
             <div class="col-span-3">
                 <div class="space-y-4">
                     <button @onclick="ShowCashInModal" class="w-full flex items-center gap-3 px-6 py-4 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 transition-colors">
@@ -115,47 +125,48 @@
                 </div>
 
 
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full">
-                            <thead class="bg-gray-50">
-                                <tr>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            @foreach (var transaction in filteredTransactions.OrderByDescending(t => t.date).Take(5))
+                            {
+                                <tr class="hover:bg-gray-50">
+                                    <td class="px-6 py-4 whitespace-nowrap">@transaction.title</td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <span class="@(transaction.transactionType == "Income" ? "text-emerald-600" : "text-red-600")">
+                                            @transaction.amount.ToString("N2") @currency
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <span class="@(transaction.transactionType == "Income" ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800") px-2 py-1 rounded-full text-sm">
+                                            @transaction.transactionType
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-gray-500">
+                                        @transaction.date.ToString("MMM dd, yyyy")
+                                    </td>
                                 </tr>
-                            </thead>
-                            <tbody class="bg-white divide-y divide-gray-200">
-                                @foreach (var transaction in filteredTransactions.OrderByDescending(t => t.date).Take(5))
-                                {
-                                    <tr class="hover:bg-gray-50">
-                                        <td class="px-6 py-4 whitespace-nowrap">@transaction.title</td>
-                                        <td class="px-6 py-4 whitespace-nowrap">
-                                            <span class="@(transaction.transactionType == "Income" ? "text-emerald-600" : "text-red-600")">
-                                                @transaction.amount.ToString("N2") @currency
-                                            </span>
-                                        </td>
-                                        <td class="px-6 py-4 whitespace-nowrap">
-                                            <span class="@(transaction.transactionType == "Income" ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800") px-2 py-1 rounded-full text-sm">
-                                                @transaction.transactionType
-                                            </span>
-                                        </td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-gray-500">
-                                            @transaction.date.ToString("MMM dd, yyyy")
-                                        </td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
-                    </div>
+                            }
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
     </div>
+</div>
 
 @code {
     private string username;
     private string currency;
+    private string selectedCurrency;
     private decimal currentBalance = 0;
     private int totalTransactions = 0;
     private decimal totalInflow = 0;
@@ -183,12 +194,31 @@
         }
 
         currency = UserService.GetUserCurrency(username) ?? "NPR";
+        selectedCurrency = currency;
         currentBalance = UserService.GetCurrentBalance(username);
         allTransactions = UserService.GetTransactions(username) ?? new();
         activeDebts = UserService.GetActiveDebts(username).Count;
 
         CalculateTransactionMetrics();
         ApplyFilters();
+    }
+
+    private async Task UpdateCurrency()
+    {
+        if (selectedCurrency != currency)
+        {
+            bool success = UserService.UpdateUserCurrency(username, selectedCurrency);
+            if (success)
+            {
+                currency = selectedCurrency;
+                // Refresh data to show values in new currency
+                currentBalance = UserService.GetCurrentBalance(username);
+                allTransactions = UserService.GetTransactions(username) ?? new();
+                CalculateTransactionMetrics();
+                ApplyFilters();
+                StateHasChanged();
+            }
+        }
     }
 
     private void CalculateTransactionMetrics()
