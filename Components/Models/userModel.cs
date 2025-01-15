@@ -33,5 +33,5 @@
     public string Notes { get; set; }
     public List<string> Tags { get; set; } = new List<string>();
     public bool IsCleared { get; set; } = false;
-    public string Currency { get; set; }
+    public string Currency { get; set; } = "NPR";
 }

@@ -148,19 +148,29 @@ public class userService
 
         decimal balance = 0;
 
-        foreach (var transaction in user.transactions)
+        foreach (var transaction in user.transactions.OrderBy(t => t.date))
         {
-            if (transaction.transactionType == "Income")
+            switch (transaction.transactionType)
             {
-                balance += transaction.amount;
-            }
-            else if (transaction.transactionType == "Expense" || transaction.transactionType == "Debt")
-            {
-                balance -= transaction.amount;
+                case "Income":
+                    balance += transaction.amount;
+                    break;
+                case "Debt":  // Treat debt as cash inflow
+                    balance += transaction.amount;
+                    break;
+                case "Expense":  // Only expenses are cash outflow
+                    balance -= transaction.amount;
+                    break;
             }
         }
 
         decimal convertedBalance = _currencyService.ConvertFromNPR(balance, user.currency);
+
+        if (convertedBalance < 0)
+        {
+            Console.WriteLine($"Warning: Negative balance detected for {username}. This should not happen with proper debt handling.");
+        }
+
         Console.WriteLine($"Current balance for {username} is {_currencyService.FormatCurrency(convertedBalance, user.currency)}");
         return convertedBalance;
     }
@@ -180,6 +190,16 @@ public class userService
             decimal amountInNPR = _currencyService.ConvertToNPR(transaction.amount, transaction.Currency);
             transaction.amount = amountInNPR;
             transaction.Currency = "NPR"; //database stores in NPR
+        }
+
+        if (transaction.title.StartsWith("Debt Repayment:"))
+        {
+            transaction.transactionType = "Expense";
+        }
+        // For new debts, create an income transaction
+        else if (transaction.transactionType == "Debt")
+        {
+            transaction.transactionType = "Debt";
         }
 
         transaction.transactionID = (transactionCounter++).ToString();
@@ -251,37 +271,52 @@ public class userService
 
     public bool AddDebt(string username, DebtModel debt)
     {
-        var users = LoadUsers();
-        var user = users.FirstOrDefault(u => u.username == username);
-        if (user == null) return false;
-
-        if (debt.Currency != "NPR")
+        try
         {
-            debt.OriginalAmount = _currencyService.ConvertToNPR(debt.OriginalAmount, debt.Currency);
+            var users = LoadUsers();
+            var user = users.FirstOrDefault(u => u.username == username);
+            if (user == null)
+            {
+                Console.WriteLine($"AddDebt failed: User {username} not found");
+                return false;
+            }
+
+            if (string.IsNullOrEmpty(debt.Currency))
+            {
+                debt.Currency = user.currency;
+            }
+
+            debtCounter++;
+            debt.DebtID = $"DEBT_{debtCounter}";
+
+            if (debt.Currency != "NPR")
+            {
+                try
+                {
+                    debt.OriginalAmount = _currencyService.ConvertToNPR(debt.OriginalAmount, debt.Currency);
+                    debt.Currency = "NPR"; // default is NPR so used this
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"AddDebt failed: Currency conversion error - {ex.Message}");
+                    return false;
+                }
+            }
+
             debt.RemainingAmount = debt.OriginalAmount;
-            debt.Currency = "NPR";
+            debt.IsCleared = false;
+
+
+
+            user.debts.Add(debt);
+            SaveUsers(users);
+            return true;
         }
-
-        debtCounter++;
-        debt.DebtID = $"DEBT_{debtCounter}";
-        debt.Currency = user.currency;
-        user.debts.Add(debt);
-
-        
-        var debtTransaction = new TransactionModel
+        catch (Exception e)
         {
-            title = $"Debt: {debt.Title}",
-            amount = debt.OriginalAmount,
-            transactionType = "Debt",
-            date = DateTime.Now,
-            notes = debt.Notes,
-            tags = debt.Tags,
-            Currency = "NPR",
-        };
-
-        AddTransaction(username, debtTransaction);
-        SaveUsers(users);
-        return true;
+            Console.WriteLine($"Error Adding debt:{e.Message}");
+            return false;
+        }
     }
 
     public bool ClearDebt(string username, string debtId, decimal amountToRepay)

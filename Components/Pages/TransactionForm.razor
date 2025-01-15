@@ -250,20 +250,6 @@
         CompleteTransaction();
     }
 
-    private void CompleteTransaction()
-    {
-        newTransaction.Currency = UserService.GetUserCurrency(username) ?? "NPR";
-        bool result = UserService.AddTransaction(username, newTransaction);
-
-        if (result)
-        {
-            Navigation.NavigateTo("/dashboard");
-        }
-        else
-        {
-            errorMessage = "Failed to add transaction. Please try again.";
-        }
-    }
 
     private void ShowDebtForm()
     {
@@ -300,6 +286,35 @@
             return;
         }
 
+        // First, create a debt transaction that will show up as inflow
+        var debtInflow = new TransactionModel
+            {
+                title = $"Debt: {newDebt.Title}",
+                amount = insufficientAmount,
+                transactionType = "Debt",
+                date = DateTime.Now,
+                notes = newDebt.Notes ?? string.Empty,
+                tags = newDebt.Tags ?? new List<string> { "Debt" },
+                Currency = UserService.GetUserCurrency(username) ?? "NPR"
+            };
+
+        // Add the debt inflow transaction first
+        bool inflowSuccess = UserService.AddTransaction(username, debtInflow);
+
+        if (!inflowSuccess)
+        {
+            debtError = "Failed to process debt inflow.";
+            return;
+        }
+
+
+        //Set Currency
+        newDebt.Currency = UserService.GetUserCurrency(username) ?? "NPR";
+        newDebt.OriginalAmount = insufficientAmount;
+        newDebt.RemainingAmount = insufficientAmount;
+        newDebt.Tags ??= new List<string>();
+        newDebt.Notes ??= string.Empty;
+
         bool success = UserService.AddDebt(username, newDebt);
         if (success)
         {
@@ -308,6 +323,21 @@
         else
         {
             debtError = "Failed to create debt. Please try again.";
+        }
+    }
+
+    private void CompleteTransaction()
+    {
+        newTransaction.Currency = UserService.GetUserCurrency(username) ?? "NPR";
+        bool result = UserService.AddTransaction(username, newTransaction);
+
+        if (result)
+        {
+            Navigation.NavigateTo("/dashboard");
+        }
+        else
+        {
+            errorMessage = "Failed to add transaction. Please try again.";
         }
     }
 }
