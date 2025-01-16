@@ -16,6 +16,8 @@ namespace PrameshBudgetTracker
 
             builder.Services.AddMauiBlazorWebView();
             builder.Services.AddSingleton<userService>();
+            builder.Services.AddScoped<currencyService>();
+
 
 
 #if DEBUG

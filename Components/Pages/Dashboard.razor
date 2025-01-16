@@ -1,9 +1,13 @@
 ﻿@page "/dashboard"
 @using PrameshBudgetTracker.Components.Layout
+@using System.Text;
+
 @layout SecondLayout
 
 @inject NavigationManager Navigation
 @inject userService UserService
+
+
 
 <div class="min-h-screen bg-gray-100">
     <div class="max-w-7xl mx-auto py-6 px-4">
@@ -46,6 +50,12 @@
                         <span class="material-icons text-xl">arrow_upward</span>
                         <span class="font-medium">Cash Out</span>
                     </button>
+
+                    <button @onclick="ExportUserDataAsCsv" class="w-full flex items-center gap-3 px-6 py-4 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors">
+                        <span class="material-icons text-xl">download</span>
+                        <span class="font-medium">Export Data</span>
+                    </button>
+
                 </div>
             </div>
 
@@ -274,4 +284,44 @@
     {
         Navigation.NavigateTo("/cashout");
     }
+
+
+    private async Task ExportUserDataAsCsv()
+    {
+        try
+        {
+            var user = UserService.GetUserData(username);
+            if (user == null) throw new Exception("User not found.");
+            if (user.transactions == null || !user.transactions.Any()) throw new Exception("No transactions found.");
+
+            // Generate CSV content
+            var csvContent = new StringBuilder();
+            csvContent.AppendLine("Title,Amount,Currency,Transaction Type,Date,Tags,Notes");
+
+            foreach (var transaction in user.transactions)
+            {
+                string tags = transaction.tags != null && transaction.tags.Any() ? string.Join(", ", transaction.tags) : "N/A";
+                csvContent.AppendLine($"{transaction.title},{transaction.amount},{transaction.Currency},{transaction.transactionType},{transaction.date:yyyy-MM-dd},{tags},{transaction.notes ?? "N/A"}");
+            }
+
+            // Determine the desktop path
+            string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+            string filePath = Path.Combine(desktopPath, "UserDataExport.csv");
+
+            // Save the CSV file
+            File.WriteAllText(filePath, csvContent.ToString());
+
+            // Notify the user
+            await Application.Current.MainPage.DisplayAlert("Export Successful", $"CSV file saved to Desktop as UserDataExport.csv", "OK");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error exporting user data as CSV: {ex.Message}");
+            await Application.Current.MainPage.DisplayAlert("Error", "Failed to export user data as CSV. Please try again.", "OK");
+        }
+    }
+
+
+
+
 }
