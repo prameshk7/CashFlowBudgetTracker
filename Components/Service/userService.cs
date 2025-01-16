@@ -25,8 +25,15 @@ public class userService
     public userService()
     {
         _currencyService = new currencyService();
-        FilePath = @"D:\AppDEV\CW-Data\users.json";
+        /*FilePath = @"D:\AppDEV\CW-Data\users.json"; It is done for easier use in pc other than mine. */ 
+        string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+        FilePath = Path.Combine(desktopPath, "users.json");
 
+        if (!File.Exists(FilePath))
+        {
+            File.WriteAllText(FilePath, "[]");
+            Console.WriteLine($"Created new users.json file at: {FilePath}");
+        }
         var users = LoadUsers();
         if (users.Any())
         {
