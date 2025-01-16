@@ -1,9 +1,8 @@
 ﻿@page "/register"
 @inject NavigationManager Navigation
+@inject userService UserService
 @using PrameshBudgetTracker.Components.Layout
 @layout FirstLayout
-@inject userService UserService
-
 
 <div class="flex items-center justify-center min-h-screen bg-gray-light">
     <div class="bg-white p-8 rounded-lg shadow-md w-96">
@@ -34,18 +33,29 @@
                     <option value="GBP">British Pound</option>
                 </select>
             </div>
-            <button @onclick="HandleRegister"
+            <button @onclick="HandleRegister" type="button"
                     class="w-full py-2 bg-slate-800 text-white font-medium rounded-lg hover:bg-primary-dark transition duration-200" disabled="@isRegistering">
-                Sign Up
+                @(isRegistering ? "Signing up..." : "Sign Up")
             </button>
         </form>
         <p class="text-sm text-gray-600 text-center mt-4">
             Already have an account? <a href="/" class="text-primary hover:underline">Log in</a>
         </p>
-        <p class="text-red-500 text-sm mt-2">@message</p>
-
     </div>
 </div>
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-lg shadow-lg">
+            <p class="text-red-500 mb-4">@message</p>
+            <button @onclick="() => message = null"
+                    class="w-full py-2 bg-slate-800 text-white font-medium rounded-lg">
+                Close
+            </button>
+        </div>
+    </div>
+}
 
 @code {
     private string selectedCurrency = "NPR";
@@ -57,17 +67,18 @@
 
     private async Task HandleRegister()
     {
+        if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(email) || string.IsNullOrEmpty(password))
+        {
+            message = "Please fill in all fields.";
+            return;
+        }
 
         isRegistering = true;
-        message = "";
 
         bool isRegistered = UserService.RegisterUser(username, email, password, selectedCurrency);
-
         if (isRegistered)
         {
-
             await Task.Delay(1000);
-
             Navigation.NavigateTo("/");
         }
         else
